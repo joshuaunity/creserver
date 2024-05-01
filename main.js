@@ -86,11 +86,11 @@ app.delete('/cars/:id/', async (req, res) => {
 
     await Car.findById(carId)
         .then((car) => {
-           if (!car) {
-               return res.status(404).json({
-                   error: "Car not Found"
-               });
-           }
+            if (!car) {
+                return res.status(404).json({
+                    error: "Car not Found"
+                });
+            }
         })
         .catch((error) => {
             res.status(400).json({
@@ -109,7 +109,7 @@ app.delete('/cars/:id/', async (req, res) => {
     res.status(200).json({});
 });
 
-app.get('/owners/', async (req, res) => { 
+app.get('/owners/', async (req, res) => {
     try {
         const owners = await Owner.find();
         res.status(200).json(owners);
@@ -120,7 +120,7 @@ app.get('/owners/', async (req, res) => {
         });
     }
 });
- 
+
 app.post('/owners/', async (req, res) => {
     const { name, car } = req.body;
 
@@ -154,7 +154,123 @@ app.post('/owners/', async (req, res) => {
     }
 });
 
+app.get('/owners/:id/', async (req, res) => {
+    const ownerID = req.params.id;
 
+    await Owner.findById(ownerID)
+        .then((owner) => {
+            if (!owner) {
+                return res.status(404).json({
+                    error: "Owner not Found"
+                });
+            }
+            res.status(200).json(owner);
+        })
+        .catch((error) => {
+            res.status(400).json({
+                error: error.message
+            });
+        });
+});
+
+app.put('/owners/:id/', async (req, res) => {
+    const ownerID = req.params.id;
+    const { name, car } = req.body;
+    const updatedCar = car || null;
+    const isOwnerIDValid = mongoose.Types.ObjectId.isValid(ownerID);
+    const isCarIDValid = mongoose.Types.ObjectId.isValid(updatedCar);
+
+    if (!isOwnerIDValid) {
+        return res.status(400).json({
+            error: "Invalid Owner ID"
+        });
+    }
+
+    if (!isCarIDValid) {
+        return res.status(400).json({
+            error: "Invalid Car ID"
+        });
+    }
+
+    if (!name) {
+        return res.status(400).json({
+            error: "Name field is required"
+        });
+    }
+
+    // check if owner exist
+    await Owner.findById(ownerID)
+        .then((owner) => {
+            if (!owner) {
+                return res.status(404).json({
+                    error: "Owner not Found"
+                });
+            }
+        })
+        .catch((error) => {
+            res.status(400).json({
+                error: error.message
+            });
+        });
+
+    // check if car exist
+    await Car.findById(car)
+        .then((car) => {
+            if (!car) {
+                return res.status(404).json({
+                    error: "Car not Found"
+                });
+            }
+        })
+        .catch((error) => {
+            console.log("car check error: ", error.message);
+            res.status(400).json({
+                error: error.message
+            });
+        });
+
+    let owner = await Owner.findByIdAndUpdate(
+        ownerID,
+        { name: name, car: updatedCar },
+        { new: true }
+    ).catch((error) => {
+        res.status(400).json({
+            error: error.message
+        });
+    });
+
+    res.status(200).json(owner);
+});
+
+app.delete('/owners/:id/', async (req, res) => {
+    const ownerID = req.params.id;
+    const isOwnerIDValid = mongoose.Types.ObjectId.isValid(ownerID);
+
+    if (!isOwnerIDValid) {
+        return res.status(400).json({
+            error: "Invalid Owner ID"
+        });
+    }
+
+    // check if owner exist
+    await Owner.findById(ownerID)
+        .then((owner) => {
+            if (!owner) {
+                return res.status(404).json({
+                    error: "Owner not Found"
+                });
+            }
+        })
+        .catch((error) => {
+            res.status(400).json({
+                error: error.message
+            });
+        });
+    
+    await Owner.findByIdAndDelete(ownerID)
+
+    res.status(200).json({});
+ });
 
 app.listen(port, () => {
     console.log(`The server is running on port: ${port}...`)
