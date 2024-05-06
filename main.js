@@ -1,11 +1,15 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { Car, Owner } = require('./models');
+const verifyToken = require('./tokenHandler');
 
 
 const dBUri = 'mongodb://localhost:27017/techyjauntcars';
-const port = 4500;
+const port = 4500; // Server Port
+const JWTSECRET = 'techyjaunty'; // JWT Secret Key
 const app = express();
 app.use(bodyParser.json());
 
@@ -122,23 +126,28 @@ app.get('/owners/', async (req, res) => {
 });
 
 app.post('/owners/', async (req, res) => {
-    const { name, car } = req.body;
+    const { name, car, email, password } = req.body;
 
     // Check if name is provided
-    if (!name) {
+    if (!name || !email || !password) {
         return res.status(400).json({
-            error: "Name field is required"
+            error: "Name, Email and Password fields are required"
         });
     }
 
     // Set carID to null if car is not provided, else assign the provided car
     const carID = car || null;
 
+    // hash owner's password
+    const hashPassword = await bcrypt.hash(password, 10);
+
     try {
         // Create a new owner instance
         const newOwner = new Owner({
             name,
-            car: carID
+            car: carID,
+            email,
+            password: hashPassword
         });
 
         // Save the new owner to the database
@@ -154,8 +163,8 @@ app.post('/owners/', async (req, res) => {
     }
 });
 
-app.get('/owners/:id/', async (req, res) => {
-    const ownerID = req.params.id;
+app.get('/owners/detial/', verifyToken, async (req, res) => {
+    const ownerID = req.user.id;
 
     await Owner.findById(ownerID)
         .then((owner) => {
@@ -175,7 +184,7 @@ app.get('/owners/:id/', async (req, res) => {
 
 app.put('/owners/:id/', async (req, res) => {
     const ownerID = req.params.id;
-    const { name, car } = req.body;
+    const { name, car, email, password } = req.body;
     const updatedCar = car || null;
     const isOwnerIDValid = mongoose.Types.ObjectId.isValid(ownerID);
     const isCarIDValid = mongoose.Types.ObjectId.isValid(updatedCar);
@@ -266,11 +275,40 @@ app.delete('/owners/:id/', async (req, res) => {
                 error: error.message
             });
         });
-    
+
     await Owner.findByIdAndDelete(ownerID)
 
     res.status(200).json({});
- });
+});
+
+app.post('/owners/login/', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({
+            error: "Email and Password fields are required"
+        });
+    }
+
+    const user = await Owner.findOne({ email })
+        .catch((error) => {
+            res.status(400).json({
+                error: error.message
+            });
+        });
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch) {
+        return res.status(400).json({
+            error: "Incorrect Password"
+        });
+    }
+
+    const token = jwt.sign({ id: user._id, email: user.email }, JWTSECRET, { expiresIn: '1h' });
+    res.status(200).json({
+        token: token
+    })
+});
 
 app.listen(port, () => {
     console.log(`The server is running on port: ${port}...`)
