@@ -5,11 +5,14 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const { Car, Owner } = require('./models');
 const verifyToken = require('./tokenHandler');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 
-const dBUri = 'mongodb://localhost:27017/techyjauntcars';
-const port = 4500; // Server Port
-const JWTSECRET = 'techyjaunty'; // JWT Secret Key
+const dBUri = process.env.DB_URI;
+const port = process.env.port; // Server Port
+const JWTSECRET = process.env.JWTSECRET; // JWT Secret Key
 const app = express();
 app.use(bodyParser.json());
 
@@ -21,7 +24,7 @@ mongoose.connect(dBUri)
         console.log('Failed to connect to MongoDB...', err)
     });
 
-app.get('/cars/', async (req, res) => {
+app.get('/cars/', verifyToken, async (req, res) => {
     try {
         const cars = await Car.find();
         res.status(200).json(cars);
@@ -33,7 +36,7 @@ app.get('/cars/', async (req, res) => {
     }
 });
 
-app.post('/cars/', async (req, res) => {
+app.post('/cars/', verifyToken, async (req, res) => {
     const { brand, model } = req.body;
 
     if (!brand) {
@@ -54,21 +57,32 @@ app.post('/cars/', async (req, res) => {
     res.status(201).json(newCar);
 });
 
-app.get('/cars/:id/', async (req, res) => {
+app.get('/cars/:id/', verifyToken, async (req, res) => {
     carId = req.params.id;
 
-    await Car.findById(carId)
-        .then((car) => {
-            res.status(200).json(car);
-        })
-        .catch((error) => {
-            res.status(400).json({
-                error: error.message
+    if (carId && mongoose.Types.ObjectId.isValid(carId)) {
+        await Car.findById(carId)
+            .then((car) => {
+                if (!car) {
+                    res.status(404).json({
+                        error: "Car not Found"
+                    });
+                }
+                res.status(200).json(car);
             })
+            .catch((error) => {
+                res.status(400).json({
+                    error: error.message
+                })
+            });
+    } else {
+        res.status(400).json({
+            error: "Invalid Car ID"
         });
+    }
 });
 
-app.put('/cars/:id/', async (req, res) => {
+app.put('/cars/:id/', verifyToken, async (req, res) => {
     const { brand, model } = req.body;
     carId = req.params.id;
 
@@ -85,7 +99,7 @@ app.put('/cars/:id/', async (req, res) => {
     res.status(200).json(car);
 });
 
-app.delete('/cars/:id/', async (req, res) => {
+app.delete('/cars/:id/', verifyToken, async (req, res) => {
     carId = req.params.id;
 
     await Car.findById(carId)
@@ -182,9 +196,9 @@ app.get('/owners/detial/', verifyToken, async (req, res) => {
         });
 });
 
-app.put('/owners/:id/', async (req, res) => {
-    const ownerID = req.params.id;
-    const { name, car, email, password } = req.body;
+app.put('/owners/', verifyToken, async (req, res) => {
+    const ownerID = req.user.id;
+    const { name, car, email } = req.body;
     const updatedCar = car || null;
     const isOwnerIDValid = mongoose.Types.ObjectId.isValid(ownerID);
     const isCarIDValid = mongoose.Types.ObjectId.isValid(updatedCar);
@@ -204,6 +218,12 @@ app.put('/owners/:id/', async (req, res) => {
     if (!name) {
         return res.status(400).json({
             error: "Name field is required"
+        });
+    }
+
+    if (!email) {
+        return res.status(400).json({
+            error: "Email field is required"
         });
     }
 
@@ -251,8 +271,51 @@ app.put('/owners/:id/', async (req, res) => {
     res.status(200).json(owner);
 });
 
-app.delete('/owners/:id/', async (req, res) => {
-    const ownerID = req.params.id;
+app.patch('/owners/parital/', verifyToken, async (req, res) => {
+    const ownerID = req.user.id;
+    const { name, car, email } = req.body;
+
+    let updatedOwnerData = {};
+    if (name) updatedOwnerData.name = name;
+    if (car && mongoose.Types.ObjectId.isValid(car)) {
+        // check if car exist
+        await Car.findById(car)
+            .then((car) => {
+                if (!car) {
+                    return res.status(404).json({
+                        error: "Car not Found"
+                    });
+                }
+            })
+            .catch((error) => {
+                console.log("car check error: ", error.message);
+                res.status(400).json({
+                    error: error.message
+                });
+            });
+
+        updatedOwnerData.car = car;
+    }
+    if (email) updatedOwnerData.email = email;
+
+
+
+    // update user data
+    const owner = await Owner.findByIdAndUpdate(
+        ownerID,
+        updatedOwnerData,
+        { new: true }
+    ).catch((error) => {
+        res.status(400).json({
+            error: error.message
+        });
+    });
+
+    res.status(200).json(owner);
+});
+
+app.delete('/owners/', verifyToken, async (req, res) => {
+    const ownerID = req.user.id;
     const isOwnerIDValid = mongoose.Types.ObjectId.isValid(ownerID);
 
     if (!isOwnerIDValid) {
