@@ -179,8 +179,6 @@ const partialUpdateOwner = asynchandler(async (req, res) => {
     }
     if (email) updatedOwnerData.email = email;
 
-
-
     // update user data
     const owner = await Owner.findByIdAndUpdate(
         ownerID,
